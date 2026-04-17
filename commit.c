@@ -194,8 +194,19 @@ int head_update(const ObjectID *new_commit) {
 //
 // Returns 0 on success, -1 on error.
 int commit_create(const char *message, ObjectID *commit_id_out) {
+    Commit commit;
+
     if (!message || !commit_id_out) return -1;
     if (message[0] == '\0') return -1;
+
+    memset(&commit, 0, sizeof(commit));
+    if (tree_from_index(&commit.tree) != 0) return -1;
+
+    if (head_read(&commit.parent) == 0) {
+        commit.has_parent = 1;
+    } else {
+        commit.has_parent = 0;
+    }
 
     return -1;
 }
