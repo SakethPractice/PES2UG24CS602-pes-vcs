@@ -137,6 +137,10 @@ static int tree_has_entry(const Tree *tree, const char *name) {
     return 0;
 }
 
+static int is_valid_tree_name(const char *name) {
+    return name[0] != '\0' && strchr(name, '/') == NULL;
+}
+
 static int write_tree_level(const Index *index, const char *prefix, ObjectID *id_out) {
     Tree tree;
     size_t prefix_len = strlen(prefix);
@@ -163,6 +167,7 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
             memcpy(dir_name, relative, dir_len);
             dir_name[dir_len] = '\0';
 
+            if (!is_valid_tree_name(dir_name)) return -1;
             if (tree_has_entry(&tree, dir_name)) continue;
             if (tree.count >= MAX_TREE_ENTRIES) return -1;
 
@@ -170,7 +175,9 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
             tree_entry->mode = MODE_DIR;
             strcpy(tree_entry->name, dir_name);
         } else {
+            if (!is_valid_tree_name(relative)) return -1;
             if (strlen(relative) >= sizeof(tree.entries[0].name)) return -1;
+            if (tree_has_entry(&tree, relative)) return -1;
             if (tree.count >= MAX_TREE_ENTRIES) return -1;
 
             tree_entry = &tree.entries[tree.count++];
