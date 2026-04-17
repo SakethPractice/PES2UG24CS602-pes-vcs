@@ -291,7 +291,8 @@ int index_add(Index *index, const char *path) {
     entry->hash = blob_id;
     entry->mtime_sec = (uint64_t)st.st_mtime;
     entry->size = (uint32_t)st.st_size;
-    snprintf(entry->path, sizeof(entry->path), "%s", path);
+    if (snprintf(entry->path, sizeof(entry->path), "%s", path) >= (int)sizeof(entry->path)) goto cleanup;
+    if (index_save(index) != 0) goto cleanup;
 
     rc = 0;
 
