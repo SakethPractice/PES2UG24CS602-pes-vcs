@@ -260,11 +260,23 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //
 // Returns 0 on success, -1 on error.
 int tree_from_index(ObjectID *id_out) {
-    Index index;
+    Index *index;
+    int rc;
 
     if (!id_out) return -1;
-    if (load_index_snapshot(&index) != 0) return -1;
-    if (index.count == 0) return -1;
+    index = malloc(sizeof(Index));
+    if (!index) return -1;
 
-    return write_tree_level(&index, "", id_out);
+    if (load_index_snapshot(index) != 0) {
+        free(index);
+        return -1;
+    }
+    if (index->count == 0) {
+        free(index);
+        return -1;
+    }
+
+    rc = write_tree_level(index, "", id_out);
+    free(index);
+    return rc;
 }
