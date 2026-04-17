@@ -199,29 +199,32 @@ int index_load(Index *index) {
 // Returns 0 on success, -1 on error.
 int index_save(const Index *index) {
     FILE *f = NULL;
-    Index sorted;
+    Index *sorted = NULL;
     char temp_path[512];
     int rc = -1;
 
     if (!index) return -1;
 
-    sorted = *index;
-    qsort(sorted.entries, sorted.count, sizeof(IndexEntry), compare_index_entries);
+    sorted = malloc(sizeof(Index));
+    if (!sorted) return -1;
+
+    *sorted = *index;
+    qsort(sorted->entries, sorted->count, sizeof(IndexEntry), compare_index_entries);
     snprintf(temp_path, sizeof(temp_path), "%s.tmp", INDEX_FILE);
 
     f = fopen(temp_path, "w");
-    if (!f) return -1;
+    if (!f) goto cleanup;
 
-    for (int i = 0; i < sorted.count; i++) {
+    for (int i = 0; i < sorted->count; i++) {
         char hex[HASH_HEX_SIZE + 1];
 
-        hash_to_hex(&sorted.entries[i].hash, hex);
+        hash_to_hex(&sorted->entries[i].hash, hex);
         if (fprintf(f, "%o %s %llu %u %s\n",
-                    sorted.entries[i].mode,
+                    sorted->entries[i].mode,
                     hex,
-                    (unsigned long long)sorted.entries[i].mtime_sec,
-                    sorted.entries[i].size,
-                    sorted.entries[i].path) < 0) {
+                    (unsigned long long)sorted->entries[i].mtime_sec,
+                    sorted->entries[i].size,
+                    sorted->entries[i].path) < 0) {
             goto cleanup;
         }
     }
@@ -241,6 +244,7 @@ int index_save(const Index *index) {
 cleanup:
     if (f) fclose(f);
     if (rc != 0) unlink(temp_path);
+    free(sorted);
     return rc;
 }
 
