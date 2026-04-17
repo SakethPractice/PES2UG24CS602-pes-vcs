@@ -254,8 +254,33 @@ cleanup:
 //
 // Returns 0 on success, -1 on error.
 int index_add(Index *index, const char *path) {
-    // TODO: Implement file staging
-    // (See Lab Appendix for logical steps)
-    (void)index; (void)path;
-    return -1;
+    FILE *f = NULL;
+    struct stat st;
+    void *data = NULL;
+    size_t read_size;
+    ObjectID blob_id;
+
+    if (!index || !path) return -1;
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) return -1;
+
+    f = fopen(path, "rb");
+    if (!f) return -1;
+
+    data = malloc((size_t)st.st_size == 0 ? 1 : (size_t)st.st_size);
+    if (!data) goto cleanup;
+
+    read_size = (size_t)st.st_size;
+    if (read_size > 0 && fread(data, 1, read_size, f) != read_size) goto cleanup;
+    if (fclose(f) != 0) {
+        f = NULL;
+        goto cleanup;
+    }
+    f = NULL;
+
+    if (object_write(OBJ_BLOB, data, read_size, &blob_id) != 0) goto cleanup;
+
+cleanup:
+    free(data);
+    if (f) fclose(f);
+    return 0;
 }
