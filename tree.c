@@ -86,6 +86,57 @@ static int compare_tree_entries(const void *a, const void *b) {
     return strcmp(((const TreeEntry *)a)->name, ((const TreeEntry *)b)->name);
 }
 
+static int load_index_snapshot(Index *index) {
+    FILE *f;
+    char line[1024];
+
+    index->count = 0;
+    f = fopen(INDEX_FILE, "r");
+    if (!f) return 0;
+
+    while (fgets(line, sizeof(line), f)) {
+        IndexEntry *entry;
+        char hex[HASH_HEX_SIZE + 1];
+        unsigned long long mtime;
+        unsigned int size;
+
+        if (index->count >= MAX_INDEX_ENTRIES) {
+            fclose(f);
+            return -1;
+        }
+
+        entry = &index->entries[index->count];
+        if (sscanf(line, "%o %64s %llu %u %511[^\n]",
+                   &entry->mode, hex, &mtime, &size, entry->path) != 5) {
+            fclose(f);
+            return -1;
+        }
+        if (hex_to_hash(hex, &entry->hash) != 0) {
+            fclose(f);
+            return -1;
+        }
+
+        entry->mtime_sec = (uint64_t)mtime;
+        entry->size = size;
+        index->count++;
+    }
+
+    fclose(f);
+    return 0;
+}
+
+static int path_has_prefix(const char *path, const char *prefix) {
+    size_t prefix_len = strlen(prefix);
+    return strncmp(path, prefix, prefix_len) == 0;
+}
+
+static int tree_has_entry(const Tree *tree, const char *name) {
+    for (int i = 0; i < tree->count; i++) {
+        if (strcmp(tree->entries[i].name, name) == 0) return 1;
+    }
+    return 0;
+}
+
 // Serialize a Tree struct into binary format for storage.
 // Caller must free(*data_out).
 // Returns 0 on success, -1 on error.
