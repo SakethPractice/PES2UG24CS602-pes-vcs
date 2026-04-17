@@ -137,6 +137,75 @@ static int tree_has_entry(const Tree *tree, const char *name) {
     return 0;
 }
 
+static int write_tree_level(const Index *index, const char *prefix, ObjectID *id_out) {
+    Tree tree;
+    size_t prefix_len = strlen(prefix);
+
+    tree.count = 0;
+
+    for (int i = 0; i < index->count; i++) {
+        const IndexEntry *index_entry = &index->entries[i];
+        const char *relative;
+        const char *slash;
+        TreeEntry *tree_entry;
+
+        if (!path_has_prefix(index_entry->path, prefix)) continue;
+
+        relative = index_entry->path + prefix_len;
+        if (*relative == '\0') continue;
+
+        slash = strchr(relative, '/');
+        if (slash) {
+            char dir_name[256];
+            size_t dir_len = (size_t)(slash - relative);
+
+            if (dir_len == 0 || dir_len >= sizeof(dir_name)) return -1;
+            memcpy(dir_name, relative, dir_len);
+            dir_name[dir_len] = '\0';
+
+            if (tree_has_entry(&tree, dir_name)) continue;
+            if (tree.count >= MAX_TREE_ENTRIES) return -1;
+
+            tree_entry = &tree.entries[tree.count++];
+            tree_entry->mode = MODE_DIR;
+            strcpy(tree_entry->name, dir_name);
+        } else {
+            if (strlen(relative) >= sizeof(tree.entries[0].name)) return -1;
+            if (tree.count >= MAX_TREE_ENTRIES) return -1;
+
+            tree_entry = &tree.entries[tree.count++];
+            tree_entry->mode = index_entry->mode;
+            tree_entry->hash = index_entry->hash;
+            strcpy(tree_entry->name, relative);
+        }
+    }
+
+    if (tree.count == 0) return -1;
+
+    for (int i = 0; i < tree.count; i++) {
+        if (tree.entries[i].mode == MODE_DIR) {
+            char child_prefix[1024];
+
+            snprintf(child_prefix, sizeof(child_prefix), "%s%s/", prefix, tree.entries[i].name);
+            if (write_tree_level(index, child_prefix, &tree.entries[i].hash) != 0) return -1;
+        }
+    }
+
+    {
+        void *data = NULL;
+        size_t len = 0;
+
+        if (tree_serialize(&tree, &data, &len) != 0) return -1;
+        if (object_write(OBJ_TREE, data, len, id_out) != 0) {
+            free(data);
+            return -1;
+        }
+        free(data);
+    }
+
+    return 0;
+}
+
 // Serialize a Tree struct into binary format for storage.
 // Caller must free(*data_out).
 // Returns 0 on success, -1 on error.
