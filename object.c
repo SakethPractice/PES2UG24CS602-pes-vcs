@@ -143,9 +143,15 @@ static int write_all(int fd, const void *buf, size_t len) {
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
     const char *type_name = object_type_name(type);
     char header[64];
+    char hex[HASH_HEX_SIZE + 1];
+    char shard_dir[512];
+    char final_path[512];
+    char temp_path[512];
     int header_len;
     size_t object_len;
     unsigned char *object_buf = NULL;
+    int temp_fd = -1;
+    int dir_fd = -1;
     int rc = -1;
 
     if (!type_name || !data || !id_out) return -1;
@@ -167,7 +173,35 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         goto cleanup;
     }
 
+    hash_to_hex(id_out, hex);
+    snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", OBJECTS_DIR, hex);
+    snprintf(final_path, sizeof(final_path), "%s/%s", shard_dir, hex + 2);
+    snprintf(temp_path, sizeof(temp_path), "%s/.tmp-%ld-%d", shard_dir, (long)getpid(), rand());
+
+    if (mkdir(shard_dir, 0755) < 0 && errno != EEXIST) goto cleanup;
+
+    temp_fd = open(temp_path, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (temp_fd < 0) goto cleanup;
+
+    if (write_all(temp_fd, object_buf, object_len) < 0) goto cleanup;
+    if (fsync(temp_fd) < 0) goto cleanup;
+    if (close(temp_fd) < 0) goto cleanup;
+    temp_fd = -1;
+
+    if (rename(temp_path, final_path) < 0) goto cleanup;
+
+    dir_fd = open(shard_dir, O_RDONLY | O_DIRECTORY);
+    if (dir_fd < 0) goto cleanup;
+    if (fsync(dir_fd) < 0) goto cleanup;
+
+    rc = 0;
+
 cleanup:
+    if (dir_fd >= 0) close(dir_fd);
+    if (temp_fd >= 0) {
+        close(temp_fd);
+        unlink(temp_path);
+    }
     free(object_buf);
     return rc;
 }
