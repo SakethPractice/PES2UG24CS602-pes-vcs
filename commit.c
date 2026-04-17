@@ -221,6 +221,7 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
 
     if (commit_serialize(&commit, &raw, &raw_len) != 0) goto cleanup;
     if (object_write(OBJ_COMMIT, raw, raw_len, commit_id_out) != 0) goto cleanup;
+    if (head_update(commit_id_out) != 0) goto cleanup;
 
     rc = 0;
 
