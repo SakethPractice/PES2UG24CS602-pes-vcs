@@ -195,7 +195,10 @@ int head_update(const ObjectID *new_commit) {
 // Returns 0 on success, -1 on error.
 int commit_create(const char *message, ObjectID *commit_id_out) {
     Commit commit;
+    void *raw = NULL;
+    size_t raw_len = 0;
     time_t now;
+    int rc = -1;
 
     if (!message || !commit_id_out) return -1;
     if (message[0] == '\0') return -1;
@@ -216,5 +219,12 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     if (snprintf(commit.message, sizeof(commit.message), "%s", message) >= (int)sizeof(commit.message)) return -1;
     commit.timestamp = (uint64_t)now;
 
-    return -1;
+    if (commit_serialize(&commit, &raw, &raw_len) != 0) goto cleanup;
+    if (object_write(OBJ_COMMIT, raw, raw_len, commit_id_out) != 0) goto cleanup;
+
+    rc = 0;
+
+cleanup:
+    free(raw);
+    return rc;
 }
