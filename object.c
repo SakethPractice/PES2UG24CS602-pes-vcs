@@ -229,7 +229,46 @@ cleanup:
 // The caller is responsible for calling free(*data_out).
 // Returns 0 on success, -1 on error (file not found, corrupt, etc.).
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
-    // TODO: Implement
-    (void)id; (void)type_out; (void)data_out; (void)len_out;
-    return -1;
+    char path[512];
+    FILE *f = NULL;
+    unsigned char *file_buf = NULL;
+    long file_size_long;
+    size_t file_size;
+    void *nul_pos;
+    char type_name[16];
+    size_t expected_size;
+    size_t data_len;
+    int rc = -1;
+
+    if (!id || !type_out || !data_out || !len_out) return -1;
+
+    object_path(id, path, sizeof(path));
+    f = fopen(path, "rb");
+    if (!f) return -1;
+
+    if (fseek(f, 0, SEEK_END) != 0) goto cleanup;
+    file_size_long = ftell(f);
+    if (file_size_long < 0) goto cleanup;
+    if (fseek(f, 0, SEEK_SET) != 0) goto cleanup;
+
+    file_size = (size_t)file_size_long;
+    file_buf = malloc(file_size);
+    if (!file_buf) goto cleanup;
+
+    if (file_size > 0 && fread(file_buf, 1, file_size, f) != file_size) goto cleanup;
+
+    nul_pos = memchr(file_buf, '\0', file_size);
+    if (!nul_pos) goto cleanup;
+
+    if (sscanf((char *)file_buf, "%15s %zu", type_name, &expected_size) != 2) goto cleanup;
+
+    data_len = file_size - (((unsigned char *)nul_pos - file_buf) + 1);
+    if (data_len != expected_size) goto cleanup;
+
+    rc = 0;
+
+cleanup:
+    free(file_buf);
+    if (f) fclose(f);
+    return rc;
 }
