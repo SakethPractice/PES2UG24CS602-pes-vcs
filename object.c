@@ -154,7 +154,7 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     int dir_fd = -1;
     int rc = -1;
 
-    if (!type_name || !data || !id_out) return -1;
+    if (!type_name || !id_out || (len > 0 && !data)) return -1;
 
     header_len = snprintf(header, sizeof(header), "%s %zu", type_name, len);
     if (header_len < 0 || (size_t)header_len + 1 > sizeof(header)) return -1;
@@ -232,12 +232,15 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
     char path[512];
     FILE *f = NULL;
     unsigned char *file_buf = NULL;
+    unsigned char *data_buf = NULL;
     long file_size_long;
     size_t file_size;
     void *nul_pos;
     char type_name[16];
     size_t expected_size;
     size_t data_len;
+    ObjectID computed_id;
+    ObjectType type;
     int rc = -1;
 
     if (!id || !type_out || !data_out || !len_out) return -1;
@@ -261,13 +264,27 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
     if (!nul_pos) goto cleanup;
 
     if (sscanf((char *)file_buf, "%15s %zu", type_name, &expected_size) != 2) goto cleanup;
+    if (parse_object_type(type_name, &type) < 0) goto cleanup;
 
     data_len = file_size - (((unsigned char *)nul_pos - file_buf) + 1);
     if (data_len != expected_size) goto cleanup;
 
+    compute_hash(file_buf, file_size, &computed_id);
+    if (memcmp(&computed_id, id, sizeof(ObjectID)) != 0) goto cleanup;
+
+    data_buf = malloc(data_len == 0 ? 1 : data_len);
+    if (!data_buf) goto cleanup;
+    if (data_len > 0) memcpy(data_buf, (unsigned char *)nul_pos + 1, data_len);
+
+    *type_out = type;
+    *data_out = data_buf;
+    *len_out = data_len;
+    data_buf = NULL;
+
     rc = 0;
 
 cleanup:
+    free(data_buf);
     free(file_buf);
     if (f) fclose(f);
     return rc;
