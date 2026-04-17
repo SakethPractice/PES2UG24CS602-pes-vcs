@@ -259,6 +259,8 @@ int index_add(Index *index, const char *path) {
     void *data = NULL;
     size_t read_size;
     ObjectID blob_id;
+    IndexEntry *entry;
+    int rc = -1;
 
     if (!index || !path) return -1;
     if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) return -1;
@@ -279,8 +281,22 @@ int index_add(Index *index, const char *path) {
 
     if (object_write(OBJ_BLOB, data, read_size, &blob_id) != 0) goto cleanup;
 
+    entry = index_find(index, path);
+    if (!entry) {
+        if (index->count >= MAX_INDEX_ENTRIES) goto cleanup;
+        entry = &index->entries[index->count++];
+    }
+
+    entry->mode = (st.st_mode & S_IXUSR) ? 0100755 : 0100644;
+    entry->hash = blob_id;
+    entry->mtime_sec = (uint64_t)st.st_mtime;
+    entry->size = (uint32_t)st.st_size;
+    snprintf(entry->path, sizeof(entry->path), "%s", path);
+
+    rc = 0;
+
 cleanup:
     free(data);
     if (f) fclose(f);
-    return 0;
+    return rc;
 }
