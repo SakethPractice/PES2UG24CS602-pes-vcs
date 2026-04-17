@@ -147,6 +147,7 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     char shard_dir[512];
     char final_path[512];
     char temp_path[512];
+    int path_len;
     int header_len;
     size_t object_len;
     unsigned char *object_buf = NULL;
@@ -174,9 +175,14 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     }
 
     hash_to_hex(id_out, hex);
-    snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", OBJECTS_DIR, hex);
-    snprintf(final_path, sizeof(final_path), "%s/%s", shard_dir, hex + 2);
-    snprintf(temp_path, sizeof(temp_path), "%s/.tmp-%ld-%d", shard_dir, (long)getpid(), rand());
+    path_len = snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", OBJECTS_DIR, hex);
+    if (path_len < 0 || (size_t)path_len >= sizeof(shard_dir)) goto cleanup;
+
+    object_path(id_out, final_path, sizeof(final_path));
+    if (strlen(final_path) >= sizeof(final_path) - 1) goto cleanup;
+
+    path_len = snprintf(temp_path, sizeof(temp_path), "%s/.tmp", shard_dir);
+    if (path_len < 0 || (size_t)path_len >= sizeof(temp_path)) goto cleanup;
 
     if (mkdir(shard_dir, 0755) < 0 && errno != EEXIST) goto cleanup;
 
